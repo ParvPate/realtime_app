@@ -19,6 +19,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "google-auth-library": "^10.3.0",
+    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.539.0",
     "next": "^15.4.6",
     "next-auth": "^4.24.11",
@@ -36,6 +38,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4.1.12",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",

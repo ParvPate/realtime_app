@@ -42,49 +42,49 @@ const Messages: FC<MessagesProps> = ({
   const [messages, setMessages] = useState<Message[]>(initialMessages)
 
   useEffect(() => {
-    pusherClient.subscribe(toPusherKey(`chat:${chatId}`))
-
-    const messageHandler = (message: Message) => {
-      console.log('New message received:', message) // Debug log
-      console.log('Session ID:', sessionId) // Debug log
-      console.log('Message sender ID:', message.senderId) // Debug log
-      
-      setMessages((prev) => [message, ...prev])
-    }
-
-    pusherClient.bind('incoming-message', messageHandler)
-
-    return () => {
-      pusherClient.unsubscribe(toPusherKey(`chat:${chatId}`))
-      pusherClient.unbind('incoming-message', messageHandler)
-    }
-  }, [chatId, sessionId])
-
-  // In your Messages component
-  useEffect(() => {
-    const channelKey = isGroup 
-      ? toPusherKey(`group:${chatId}:messages`)
-      : toPusherKey(`chat:${chatId}`)
-      
-    pusherClient.subscribe(channelKey)
+    let channelKey: string;
+    let eventName: string;
     
-    const messageHandler = (message: Message) => {
-      setMessages((prev) => [message, ...prev])
+    if (isGroup) {
+      // For group chats, subscribe to group:${groupId} and listen for incoming_message
+      const groupId = chatId.replace('group:', '');
+      channelKey = toPusherKey(`group:${groupId}`);
+      eventName = 'incoming_message';
+    } else {
+      // For 1-1 chats, subscribe to chat:${chatId} and listen for incoming-message
+      channelKey = toPusherKey(`chat:${chatId}`);
+      eventName = 'incoming-message';
     }
+    
+    pusherClient.subscribe(channelKey);
 
-    pusherClient.bind('new_message', messageHandler)
+    const messageHandler = (message: Message) => {
+      console.log('New message received:', message); // Debug log
+      console.log('Session ID:', sessionId); // Debug log
+      console.log('Message sender ID:', message.senderId); // Debug log
+      
+      // Add new message to the beginning of the array (since we're using flex-col-reverse)
+      setMessages((prev) => [message, ...prev]);
+    };
+
+    pusherClient.bind(eventName, messageHandler);
 
     return () => {
-      pusherClient.unsubscribe(channelKey)
-      pusherClient.unbind('new_message', messageHandler)
-    }
-  }, [chatId, isGroup])
+      pusherClient.unsubscribe(channelKey);
+      pusherClient.unbind(eventName, messageHandler);
+    };
+  }, [chatId, sessionId, isGroup]);
 
   const scrollDownRef = useRef<HTMLDivElement | null>(null)
-
+  /*
   const formatTimestamp = (timestamp: number) => {
-    return format(timestamp, 'HH:mm')
-  }
+    return format(timestamp ?? Date.now(), 'HH:mm')
+  }*/
+
+  const formatTimestamp = (timestamp?: number) => {
+  if (!timestamp) return '' // or return a fallback like '--:--'
+  return format(timestamp, 'HH:mm')
+}
 
   // Debug: Log the current messages and sessionId
   console.log('Rendering messages:', messages.length)

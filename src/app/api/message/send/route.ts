@@ -12,7 +12,7 @@ import { getServerSession } from 'next-auth'
 
 export async function POST(req: Request) {
   try {
-  
+
    
 
     const session = await getServerSession(authOptions)
@@ -22,7 +22,23 @@ export async function POST(req: Request) {
 
     let recipients: string[] = []
 
+    
+
      if (isGroupChat(chatId)) {
+      // Get sender info
+      const rawSender = (await fetchRedis(
+        'get',
+        `user:${session.user.id}`
+      )) as string
+      const sender = JSON.parse(rawSender) as User
+
+      const timestamp = Date.now()
+      const message: Message = {
+        id: nanoid(),
+        senderId: session.user.id,
+        text,
+        timestamp: Date.now(),
+      }
       // Get group members
 
       const groupData = await db.get<string>(`groups:${chatId.replace("group:", "")}`);
@@ -31,8 +47,7 @@ export async function POST(req: Request) {
       const group: GroupChat = JSON.parse(groupData);
       recipients = group.members;
     }else {
-      
-
+      console.log("In 1-1")
       const { text, chatId }: { text: string; chatId: string } = await req.json()
       const session = await getServerSession(authOptions)
 
@@ -79,6 +94,7 @@ export async function POST(req: Request) {
 
       // notify all connected chat room clients
       await pusherServer.trigger(toPusherKey(`chat:${chatId}`), 'incoming-message', message)
+      console.log("Pusher sent message:", message);
 
       await pusherServer.trigger(toPusherKey(`user:${friendId}:chats`), 'new_message', {
         ...message,
@@ -104,17 +120,49 @@ export async function POST(req: Request) {
     }
 
     // Store message
-    await db.zadd(`messages:${chatId}`, {
-      score: Date.now(),
-      member: JSON.stringify(message),
-    })
+    if (isGroupChat(chatId)) {
+      // For group chats, store in group:${groupId}:messages
+      const groupId = chatId.replace('group:', '')
+      await db.zadd(`group:${groupId}:messages`, {
+        score: Date.now(),
+        member: JSON.stringify(message),
+      })
+    } else {
+      // For 1-1 chats, store in chat:${chatId}:messages
+      await db.zadd(`chat:${chatId}:messages`, {
+        score: Date.now(),
+        member: JSON.stringify(message),
+      })
+    }
 
     // Trigger real-time update for all recipients
-    await pusherServer.trigger(
-      recipients.map(id => `user:${id}:chats`),
-      'new_message',
-      message
-    )
+    if (isGroupChat(chatId)) {
+      // For group chats, send to the group channel
+      const groupId = chatId.replace('group:', '')
+      await pusherServer.trigger(toPusherKey(`group:${groupId}`), 'incoming_message', message)
+      console.log("Pusher sent group message:", message);
+    } else {
+      // For 1-1 chats, send to both users' chat channels
+      await pusherServer.trigger(toPusherKey(`chat:${chatId}`), 'incoming-message', message)
+      console.log("Pusher sent 1-1 message:", message);
+      
+      // Also notify the friend's chat list
+      const [userId1, userId2] = chatId.split('--')
+      const friendId = session.user.id === userId1 ? userId2 : userId1
+      
+      // Get sender info for the notification
+      const rawSender = (await fetchRedis(
+        'get',
+        `user:${session.user.id}`
+      )) as string
+      const sender = JSON.parse(rawSender) as User
+      
+      await pusherServer.trigger(toPusherKey(`user:${friendId}:chats`), 'new_message', {
+        ...message,
+        senderImg: sender.image,
+        senderName: sender.name
+      })
+    }
 
     return Response.json({ success: true })
 

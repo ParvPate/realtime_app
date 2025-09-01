@@ -21,7 +21,7 @@ export async function generateMetadata({
   const session = await getServerSession(authOptions)
   if (!session) notFound()
 
-  const { chatId } = params
+  const { chatId } = await params
   const isGroup = isGroupChat(chatId)
 
   
